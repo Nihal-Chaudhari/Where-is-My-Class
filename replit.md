@@ -1,6 +1,6 @@
-# [Project name]
+# GEC Palanpur Class Finder
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Personalized timetable lookup for Government Engineering College, Palanpur students.
 
 ## Run & Operate
 
@@ -22,15 +22,20 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/gec-class-finder/src/App.tsx` — frontend routes, structured reference data, enrollment detection, and timetable rendering.
+- `artifacts/gec-class-finder/src/index.css` — product theme, responsive layout, and interaction states.
+- `artifacts/gec-class-finder/.replit-artifact/artifact.toml` — root web artifact routing and workflow configuration.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The class finder is a single unified flow: enrollment lookup detects branch and CP batch, while semester is always selected manually.
+- Reference-derived data is kept in separate typed collections for branches, semesters, subjects, faculty, rooms, enrollment mappings, and timetables.
+- Unsupported semesters remain explicit no-data states; the UI does not infer or invent schedules, rooms, faculty, or enrollment mappings.
+- CP-specific timetable labels are resolved from the supplied combined reference cells using the detected batch.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The app gives students a polished home entry point, lookup by supplied enrollment mappings, manual Semester 1–8 selection, a personalized Computer Engineering timetable for supported reference data, current lecture highlighting, and honest no-data states for semesters without supplied schedules.
 
 ## User preferences
 

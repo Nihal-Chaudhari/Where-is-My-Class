@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "GEC Palanpur Class Finder"
+description = "A polished timetable and class finder for Government Engineering College, Palanpur. Students enter their enrollment number, get their branch and CP batch, choose a semester manually, and view the right timetable."
+version = "1.0.0"
+id = "artifacts/gec-class-finder"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18244
+
+[services.development]
+run = "pnpm --filter @workspace/gec-class-finder run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gec-class-finder", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/gec-class-finder/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18244"
+BASE_PATH = "/"
