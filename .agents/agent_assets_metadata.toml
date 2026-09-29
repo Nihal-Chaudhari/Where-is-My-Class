@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "VtOibt33d3hIzqM6YD9s9"
+uri = "file://exports/gec-palanpur-class-finder-source.zip"
+type = "unspecified"
+title = "GEC Palanpur Class Finder — Complete Source ZIP"
+description = "Editable project source archive with artifacts, shared libraries, generated API source, public assets, configuration files, package manifests, lockfile, scripts, and project documentation. Regenerable node_modules, build output, caches, platform tooling, and runtime metadata are excluded."
+logical_id = "8d8a87e9-1044-4d32-af5a-a707bdd70828"
+content_hash = "sha256:56426e8aa1571cd54ad2ab313bffc6b8bbf808da424b919519eca857fd3fc76f"
+size = 244574
+mtime_ms = 1790690093188
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:3ba581d6-60a4-41a6-8c03-e301103c2b2c/8d8a87e9-1044-4d32-af5a-a707bdd70828/bf2d56cc-b7a1-4f12-a7ea-0e3f829565a5"
+storage_version_token = "1790690103678627"
+content_type = "application/octet-stream"
