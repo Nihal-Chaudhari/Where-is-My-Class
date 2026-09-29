@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ArrowRight, BookOpen, CalendarDays, CircleAlert, MapPin, RotateCcw, Search, Timer, University } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, Check, CircleAlert, Clock3, MapPin, RotateCcw, Search, Timer, University } from 'lucide-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -18,6 +18,7 @@ type EnrollmentMapping = { enrollment: string; branchId: string; batch: string }
 type TimetableCell = { label: string; faculty?: string; room?: string };
 type TimetableRow = { time: string; cells: Record<string, TimetableCell | null> };
 type StudentContext = EnrollmentMapping & { semester: number };
+type Lecture = { row: TimetableRow; cell: TimetableCell };
 
 /* Supplied/reference data: keep academic facts here, apart from the UI. */
 export const BRANCHES: Branch[] = [
@@ -124,8 +125,6 @@ export const TIMETABLES: Record<string, TimetableRow[]> = {
 };
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-const TIME_STARTS = ['10:30', '11:30', '02:00', '03:00', '04:10'];
-
 function timetableCellForBatch(cell: TimetableCell, batch: string) {
   const parts = cell.label.split(' / ');
   const hasBatchSpecificLabels = parts.some((part) => /\bCP[123]\b/.test(part));
@@ -138,6 +137,19 @@ function timetableCellForBatch(cell: TimetableCell, batch: string) {
   }
 
   return null;
+}
+
+function resolvedRowsForStudent(student: StudentContext) {
+  const rows = TIMETABLES[`${student.branchId}-${student.semester}`] ?? [];
+  return rows.map((row) => ({
+    ...row,
+    cells: Object.fromEntries(
+      DAYS.map((day) => [
+        day,
+        row.cells[day] ? timetableCellForBatch(row.cells[day], student.batch) : null,
+      ]),
+    ),
+  }));
 }
 
 function normalizeEnrollment(value: string) {
@@ -155,19 +167,44 @@ function timeToMinutes(value: string) {
   return (isAfternoon ? rawHour + 12 : rawHour) * 60 + rawMinute;
 }
 
-function isCurrentLecture(time: string, day: string, now: Date) {
-  const today = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(now);
-  if (today !== day) return false;
+function timeRangeToMinutes(time: string) {
   const [start, end] = time.split('–');
-  const current = now.getHours() * 60 + now.getMinutes();
-  return current >= timeToMinutes(start) && current < timeToMinutes(end);
+  return { start: timeToMinutes(start), end: timeToMinutes(end) };
+}
+
+function getTodayName(now: Date) {
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(now);
+}
+
+function lecturesForDay(rows: TimetableRow[], day: string): Lecture[] {
+  return rows.flatMap((row) => {
+    const cell = row.cells[day];
+    return cell ? [{ row, cell }] : [];
+  });
+}
+
+function getLectureMoment(lectures: Lecture[], now: Date) {
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const current = lectures.find(({ row }) => {
+    const range = timeRangeToMinutes(row.time);
+    return currentMinutes >= range.start && currentMinutes < range.end;
+  });
+  const next = lectures.find(({ row }) => timeRangeToMinutes(row.time).start > currentMinutes);
+  return { current, next };
+}
+
+function formatCountdown(minutes: number, prefix: string) {
+  if (minutes <= 0) return `${prefix} now`;
+  if (minutes < 60) return `${prefix} ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `${prefix} ${hours}h${remainder ? ` ${remainder}m` : ''}`;
 }
 
 type CampusState = {
   student: StudentContext | null;
   setStudent: (student: StudentContext) => void;
   resetStudent: () => void;
-  changeSemester: (semester: number) => void;
 };
 
 const CampusContext = createContext<CampusState | null>(null);
@@ -187,7 +224,8 @@ function Header() {
         <span className="brand-text">GEC Palanpur<span className="brand-subtext">Class finder</span></span>
       </Link>
       <nav className="header-nav" aria-label="Primary navigation">
-        <Link href="/timetable" aria-current={location === '/timetable' ? 'page' : undefined} data-testid="link-timetable">Timetable</Link>
+        <Link href="/my-class" aria-current={location === '/my-class' ? 'page' : undefined} data-testid="link-my-class">My class</Link>
+        <Link href="/timetable" aria-current={location === '/timetable' ? 'page' : undefined} data-testid="link-timetable">Full timetable</Link>
         <Link href="/find" aria-current={location === '/find' ? 'page' : undefined} data-testid="link-find">Find my class</Link>
       </nav>
     </header>
@@ -202,46 +240,35 @@ function Home() {
         <section className="hero enter">
           <div>
             <div className="eyebrow">Government Engineering College, Palanpur</div>
-            <h1>Find Your Class.<br /><em>Find Your Timetable.</em></h1>
-            <p className="hero-copy">Your personalized college timetable, just one search away.</p>
+            <h1>Find Your Class.<br /><em>Never Miss Your Lecture.</em></h1>
+            <p className="hero-copy">Find your class, current lecture, next lecture and complete timetable in seconds.</p>
             <Link href="/find" className="primary-button focus-ring" data-testid="button-find-my-class">
               Find My Class <ArrowRight size={16} strokeWidth={2.2} aria-hidden="true" />
             </Link>
           </div>
-          <div className="preview-wrap" aria-label="Preview of a weekly class timetable">
-            <span className="preview-label">A quiet view of your week</span>
-            <div className="timetable-preview">
-              <div className="preview-top"><strong>Semester 1</strong><span>CP1 · 11/7/2026</span></div>
-              <div className="preview-grid">
-                <span />
-                {['MON', 'TUE', 'WED', 'THU', 'FRI'].map((day) => <span className="day" key={day}>{day}</span>)}
-                <span className="time">10:30</span>
-                <div className="preview-cell tinted"><strong>BME</strong><small>AKP</small></div>
-                <div className="preview-cell"><strong>BE</strong><small>DJP</small></div>
-                <div className="preview-cell"><strong>MATHS 1</strong><small>DAP</small></div>
-                <div className="preview-cell"><strong>PPS</strong><small>KMG</small></div>
-                <div className="preview-cell" />
-                <span className="time">11:30</span>
-                <div className="preview-cell"><strong>PPS</strong><small>KMG</small></div>
-                <div className="preview-cell current"><strong>BME</strong><small>PRP</small></div>
-                <div className="preview-cell"><strong>BME CP1</strong><small>PRP</small></div>
-                <div className="preview-cell"><strong>BEE</strong><small>DJP</small></div>
-                <div className="preview-cell"><strong>BEE</strong><small>DJP</small></div>
-                <span className="time">02:00</span>
-                <div className="preview-cell"><strong>MATHS 1</strong><small>DAP</small></div>
-                <div className="preview-cell"><strong>PPS CP1</strong><small>KMG</small></div>
-                <div className="preview-cell"><strong>IPC</strong><small>CGP / DT</small></div>
-                <div className="preview-cell"><strong>BEE</strong><small>DJP</small></div>
-                <div className="preview-cell"><strong>LIBRARY</strong><small>S.K.</small></div>
+          <div className="preview-wrap" aria-label="Preview of the class finder flow">
+            <span className="preview-label">Your day, at a glance</span>
+            <div className="finder-preview">
+              <div className="finder-preview-top">
+                <span className="preview-kicker">GEC PALANPUR</span>
+                <span className="preview-status"><span className="live-dot" /> Ready when you are</span>
               </div>
-              <p className="preview-note">Faculty initials and subject codes are shown as supplied in the reference timetable.</p>
+              <div className="finder-preview-body">
+                <span className="finder-preview-step">01</span>
+                <div><strong>Select your semester</strong><small>Semester 1 · Semester 2 · Semester 3 · ...</small></div>
+                <Check size={17} aria-hidden="true" />
+                <span className="finder-preview-step">02</span>
+                <div><strong>Find your class</strong><small>Enter your enrollment number</small></div>
+                <ArrowRight size={17} aria-hidden="true" />
+              </div>
+              <div className="finder-preview-footer"><Clock3 size={14} /> Current lecture, next lecture, and your full week</div>
             </div>
           </div>
         </section>
         <section className="home-strip" aria-label="How class finder works">
-          <div><strong><Search size={14} aria-hidden="true" /> Search your enrollment</strong><p>Use the number issued to you by GEC Palanpur.</p></div>
-          <div><strong><BookOpen size={14} aria-hidden="true" /> Confirm your semester</strong><p>You choose the semester. It is never inferred.</p></div>
-          <div><strong><MapPin size={14} aria-hidden="true" /> Read the week</strong><p>See your subject, faculty initials, and supplied room details in one view.</p></div>
+          <div><strong><BookOpen size={14} aria-hidden="true" /> 01 / Select semester</strong><p>You choose the semester. It is never inferred.</p></div>
+          <div><strong><Search size={14} aria-hidden="true" /> 02 / Find your class</strong><p>Use the enrollment number issued by GEC Palanpur.</p></div>
+          <div><strong><MapPin size={14} aria-hidden="true" /> 03 / See your day</strong><p>Current lecture first, full timetable when you need it.</p></div>
         </section>
       </main>
     </div>
@@ -253,14 +280,20 @@ function FinderPage() {
   const { setStudent } = useCampus();
   const [enrollment, setEnrollment] = useState('');
   const [semester, setSemester] = useState('');
-  const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState('');
   const detected = useMemo(() => findEnrollment(enrollment), [enrollment]);
-  const branch = BRANCHES.find((item) => item.id === detected?.branchId);
+
+  const chooseSemester = (value: number) => {
+    setSemester(String(value));
+    setEnrollment('');
+    setError('');
+  };
 
   const handleLookup = () => {
-    setHasSearched(true);
-    setError('');
+    if (!semester) {
+      setError('Select your semester first.');
+      return;
+    }
     if (!enrollment.trim()) {
       setError('Enter an enrollment number to continue.');
       return;
@@ -269,17 +302,8 @@ function FinderPage() {
       setError('We could not find that enrollment in the supplied reference list.');
       return;
     }
-    setSemester('');
-  };
-
-  const handleContinue = () => {
-    if (!detected) return;
-    if (!semester) {
-      setError('Choose your semester. It is not inferred from your enrollment number.');
-      return;
-    }
     setStudent({ ...detected, semester: Number(semester) });
-    setLocation('/timetable');
+    setLocation('/my-class');
   };
 
   return (
@@ -287,69 +311,80 @@ function FinderPage() {
       <Header />
       <main className="page-main enter">
         <div className="page-heading">
-          <div className="eyebrow">01 / Identify your place</div>
-          <h1>Find your class</h1>
-          <p>Start with your enrollment number. We’ll show what the supplied reference data recognizes, then you choose the semester yourself.</p>
+          <div className="eyebrow">Find my class</div>
+          <h1>Start with your semester.</h1>
+          <p>Choose your semester first, then enter your enrollment number. We’ll detect your branch and practical batch from the supplied reference mapping.</p>
         </div>
         <div className="finder-layout">
           <section className="finder-card" aria-labelledby="finder-title">
             <h2 id="finder-title" className="sr-only">Find a student timetable</h2>
-            <label className="field-label" htmlFor="enrollment-number">Enrollment number</label>
-            <p className="field-hint">Use the format printed on your college records, for example <span className="font-mono-app">CE001</span> or <span className="font-mono-app">CE104</span>.</p>
-            <div className="input-row">
-              <input
-                id="enrollment-number"
-                className="text-input focus-ring"
-                value={enrollment}
-                onChange={(event) => { setEnrollment(event.target.value.toUpperCase()); setHasSearched(false); setError(''); }}
-                onKeyDown={(event) => { if (event.key === 'Enter') handleLookup(); }}
-                placeholder="Type your enrollment number"
-                autoComplete="off"
-                aria-invalid={Boolean(error)}
-                data-testid="input-enrollment-number"
-              />
-              <button type="button" className="primary-button find-button focus-ring" onClick={handleLookup} data-testid="button-lookup-enrollment">
-                Look up <Search size={15} aria-hidden="true" />
-              </button>
-            </div>
-            {error && <p className="validation-error" role="alert" data-testid="status-find-error"><CircleAlert size={14} aria-hidden="true" />{error}</p>}
-            {hasSearched && detected && branch && (
-              <div className="detected-card" data-testid="card-detected-student">
-                <h2>We found a reference match</h2>
-                <div className="student-fields">
-                  <div className="student-field"><span>Enrollment</span><strong data-testid="text-detected-enrollment">{detected.enrollment}</strong></div>
-                  <div className="student-field"><span>Branch</span><strong data-testid="text-detected-branch">{branch.code}</strong></div>
-                  <div className="student-field"><span>Batch</span><strong data-testid="text-detected-batch">{detected.batch}</strong></div>
-                </div>
-                <div className="semester-select">
-                  <label className="field-label" htmlFor="semester-choice">Choose semester</label>
-                  <select id="semester-choice" className="select-input focus-ring" value={semester} onChange={(event) => { setSemester(event.target.value); setError(''); }} data-testid="select-semester">
-                    <option value="">Select a semester</option>
-                    {SEMESTERS.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
-                  </select>
-                  <p className="semester-help">Semester is a manual choice; this tool will not guess it.</p>
-                </div>
-                <div className="continue-row">
-                  <span className="reference-note">Branch and batch are detected from supplied reference mappings.</span>
-                  <button type="button" className="primary-button focus-ring" onClick={handleContinue} data-testid="button-open-timetable">
-                    Open timetable <ArrowRight size={15} aria-hidden="true" />
-                  </button>
-                </div>
+            <div className="finder-step">
+              <div className="step-heading">
+                <span className="step-number">01</span>
+                <div><span className="step-label">Step one</span><h2>Select your semester</h2></div>
               </div>
+              <div className="semester-choice-grid" role="radiogroup" aria-label="Select your semester">
+                {SEMESTERS.map((item) => (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={semester === String(item.id)}
+                    className={`semester-choice focus-ring ${semester === String(item.id) ? 'selected' : ''}`}
+                    onClick={() => chooseSemester(item.id)}
+                    key={item.id}
+                    data-testid={`choice-semester-${item.id}`}
+                  >
+                    <span>0{item.id}</span>
+                    <strong>{item.label}</strong>
+                    {semester === String(item.id) && <Check size={15} aria-hidden="true" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={`finder-step finder-step-two ${semester ? 'visible' : ''}`}>
+              <div className="step-heading">
+                <span className="step-number">02</span>
+                <div><span className="step-label">Step two</span><h2>Enter your enrollment number</h2></div>
+              </div>
+              <p className="field-hint">Use the format printed on your college records, for example <span className="font-mono-app">CE06</span> or <span className="font-mono-app">CE104</span>.</p>
+              <div className="input-row">
+                <input
+                  id="enrollment-number"
+                  className="text-input focus-ring"
+                  value={enrollment}
+                  onChange={(event) => { setEnrollment(event.target.value.toUpperCase()); setError(''); }}
+                  onKeyDown={(event) => { if (event.key === 'Enter') handleLookup(); }}
+                  placeholder="Enter enrollment number"
+                  autoComplete="off"
+                  aria-invalid={Boolean(error)}
+                  disabled={!semester}
+                  data-testid="input-enrollment-number"
+                />
+                <button type="button" className="primary-button find-button focus-ring" onClick={handleLookup} disabled={!semester} data-testid="button-lookup-enrollment">
+                  Find My Class <Search size={15} aria-hidden="true" />
+                </button>
+              </div>
+              {semester && <p className="semester-help"><Check size={13} aria-hidden="true" /> Semester {semester} selected. Your branch and CP batch will be detected automatically.</p>}
+              {error && <p className="validation-error" role="alert" data-testid="status-find-error"><CircleAlert size={14} aria-hidden="true" />{error}</p>}
+              <div className="finder-submit-note">No manual CP selection is needed.</div>
+            </div>
+            {!semester && (
+              <div className="finder-locked-note"><CalendarDays size={16} aria-hidden="true" /> Select a semester to unlock enrollment lookup.</div>
             )}
-            {hasSearched && enrollment.trim() && !detected && (
-              <div className="empty-card" data-testid="status-no-enrollment">
-                <div className="empty-icon"><Search size={19} aria-hidden="true" /></div>
-                <h2>No reference match</h2>
-                <p>Check the enrollment number and try again. Only the supplied demo enrollment mappings are available in this frontend.</p>
-                <button type="button" className="quiet-button focus-ring" onClick={() => setEnrollment('')} data-testid="button-clear-enrollment">Clear and try again</button>
+            {semester && detected && (
+              <div className="finder-detection-preview" aria-live="polite">
+                <span className="live-dot" aria-hidden="true" />
+                <span>Reference match ready for <strong>{detected.enrollment}</strong> · {detected.batch}</span>
               </div>
             )}
           </section>
           <aside className="context-card">
-            <h2>What gets detected</h2>
-            <p>The reference mapping currently covers Computer Engineering enrollment numbers and their practical batch group.</p>
+            <h2>One unified flow</h2>
+            <p>Semester comes first. Enrollment comes second. Your branch and practical batch are detected from the supplied mapping.</p>
             <ul className="context-list">
+              <li>Select Semester 1–8 manually</li>
+              <li>Enter your enrollment number</li>
+              <li>Open your current class view</li>
               <li>CP1 — through <span className="font-mono-app">CE95</span></li>
               <li>CP2 — <span className="font-mono-app">CE96</span> through <span className="font-mono-app">CE103</span></li>
               <li>CP3 — <span className="font-mono-app">CE104</span> through <span className="font-mono-app">CE114</span></li>
@@ -361,9 +396,127 @@ function FinderPage() {
   );
 }
 
-function TimetablePage() {
+function MyClassPage() {
   const [, setLocation] = useLocation();
-  const { student, changeSemester, resetStudent } = useCampus();
+  const { student, resetStudent } = useCampus();
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!student) setLocation('/find');
+  }, [setLocation, student]);
+
+  if (!student) return null;
+
+  const branch = BRANCHES.find((item) => item.id === student.branchId);
+  const rows = resolvedRowsForStudent(student);
+  const semester = SEMESTERS.find((item) => item.id === student.semester);
+  const today = getTodayName(now);
+  const todayLectures = lecturesForDay(rows, today);
+  const { current, next } = getLectureMoment(todayLectures, now);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentEndsIn = current ? timeRangeToMinutes(current.row.time).end - currentMinutes : 0;
+  const nextStartsIn = next ? timeRangeToMinutes(next.row.time).start - currentMinutes : 0;
+
+  const startOver = () => {
+    resetStudent();
+    setLocation('/find');
+  };
+
+  return (
+    <div className="app-shell">
+      <Header />
+      <main className="page-main enter">
+        <div className="class-result-header">
+          <div>
+            <div className="eyebrow">My class / {today}</div>
+            <h1>My class</h1>
+            <p>{branch?.name ?? 'Branch unavailable'} · {semester?.label ?? 'Semester unavailable'} · {student.batch}</p>
+          </div>
+          <button type="button" className="quiet-button focus-ring" onClick={startOver} data-testid="button-start-over"><RotateCcw size={14} aria-hidden="true" /> Start over</button>
+        </div>
+        <div className="student-context class-context" aria-label="Current student context">
+          <span className="context-chip"><University size={12} aria-hidden="true" /><strong data-testid="text-current-enrollment">{student.enrollment}</strong></span>
+          <span className="context-chip"><BookOpen size={12} aria-hidden="true" /><strong data-testid="text-current-batch">{student.batch}</strong></span>
+          <span className="context-chip"><CalendarDays size={12} aria-hidden="true" /><strong data-testid="text-current-branch">{branch?.code}</strong></span>
+        </div>
+        <div className="focus-grid">
+          <section className={`focus-card current-card ${current ? 'is-live' : 'is-idle'}`} data-testid="card-current-lecture">
+            <div className="focus-card-heading">
+              <span className="focus-label">Current lecture</span>
+              {current ? <span className="live-badge"><span className="live-dot" /> Live now</span> : <Clock3 size={16} aria-hidden="true" />}
+            </div>
+            {current ? (
+              <>
+                <h2 data-testid="text-current-lecture">{current.cell.label}</h2>
+                <p className="lecture-time">{current.row.time}</p>
+                <div className="lecture-details"><span>Faculty · {current.cell.faculty ?? 'not listed'}</span><span>Room · {current.cell.room ?? 'not listed'}</span></div>
+                <p className="countdown">{formatCountdown(currentEndsIn, 'Ends in')}</p>
+              </>
+            ) : (
+              <>
+                <h2 data-testid="text-no-current-lecture">No lecture right now</h2>
+                <p className="focus-support">Your next class is shown below. This view follows your local time.</p>
+              </>
+            )}
+          </section>
+          <section className="focus-card next-card" data-testid="card-next-lecture">
+            <div className="focus-card-heading"><span className="focus-label">Next lecture</span><ArrowRight size={16} aria-hidden="true" /></div>
+            {next ? (
+              <>
+                <h2 data-testid="text-next-lecture">{next.cell.label}</h2>
+                <p className="lecture-time">{next.row.time}</p>
+                <div className="lecture-details"><span>Faculty · {next.cell.faculty ?? 'not listed'}</span><span>Room · {next.cell.room ?? 'not listed'}</span></div>
+                <p className="countdown">{formatCountdown(nextStartsIn, 'Starts in')}</p>
+              </>
+            ) : (
+              <>
+                <h2 data-testid="text-no-next-lecture">No more lectures today</h2>
+                <p className="focus-support">There are no upcoming supplied lectures for {today}.</p>
+              </>
+            )}
+          </section>
+        </div>
+        <section className="today-section" aria-labelledby="today-heading">
+          <div className="section-heading-row">
+            <div><span className="focus-label">Today’s lectures</span><h2 id="today-heading">{today}</h2></div>
+            <span className="today-source">Reference schedule · {student.batch}</span>
+          </div>
+          {todayLectures.length > 0 ? (
+            <div className="today-list">
+              {todayLectures.map(({ row, cell }) => {
+                const range = timeRangeToMinutes(row.time);
+                const isCurrent = Boolean(current && current.row.time === row.time);
+                const isComplete = range.end <= currentMinutes;
+                return (
+                  <div className={`today-lecture ${isCurrent ? 'is-current' : ''} ${isComplete && !isCurrent ? 'is-complete' : ''}`} key={row.time} data-testid={`today-lecture-${row.time.replace(/[^0-9]/g, '')}`}>
+                    <div className="today-time">{row.time}</div>
+                    <div className="today-subject"><strong>{cell.label}</strong><span>{isCurrent ? 'Live now' : isComplete ? 'Completed' : 'Upcoming'}</span></div>
+                    <div className="today-meta"><span>Faculty · {cell.faculty ?? 'not listed'}</span><span>Room · {cell.room ?? 'not listed'}</span></div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="day-empty" data-testid="status-no-today-lectures"><CalendarDays size={18} aria-hidden="true" /><span>No supplied lectures are listed for {today}.</span></div>
+          )}
+        </section>
+        <div className="class-actions">
+          <Link href="/timetable" className="primary-button focus-ring" data-testid="button-view-full-timetable">View full timetable <ArrowRight size={15} aria-hidden="true" /></Link>
+          <button type="button" className="quiet-button focus-ring" onClick={startOver} data-testid="button-change-enrollment"><ArrowLeft size={14} aria-hidden="true" /> Change enrollment</button>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function FullTimetablePage() {
+  const [, setLocation] = useLocation();
+  const { student, resetStudent } = useCampus();
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -378,10 +531,10 @@ function TimetablePage() {
   if (!student) return null;
 
   const branch = BRANCHES.find((item) => item.id === student.branchId);
-  const timetableKey = `${student.branchId}-${student.semester}`;
-  const rows = TIMETABLES[timetableKey];
+  const rows = resolvedRowsForStudent(student);
   const semester = SEMESTERS.find((item) => item.id === student.semester);
-
+  const today = getTodayName(now);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const startOver = () => {
     resetStudent();
     setLocation('/find');
@@ -393,37 +546,17 @@ function TimetablePage() {
       <main className="page-main enter">
         <div className="timetable-header">
           <div>
-            <div className="eyebrow">02 / Your week</div>
+            <div className="eyebrow">Full timetable</div>
             <h1>{semester?.label ?? 'Timetable'}</h1>
-            <p>{branch?.name ?? 'Branch unavailable'} · First Semester Batch 2026 · 11/7/2026 to 12/11/2026</p>
-            <div className="student-context" aria-label="Current student context">
-              <span className="context-chip"><University size={12} aria-hidden="true" /><strong data-testid="text-current-enrollment">{student.enrollment}</strong></span>
-              <span className="context-chip"><BookOpen size={12} aria-hidden="true" /><strong data-testid="text-current-batch">{student.batch}</strong></span>
-              <span className="context-chip"><CalendarDays size={12} aria-hidden="true" /><strong data-testid="text-current-branch">{branch?.code}</strong></span>
-            </div>
+            <p>{branch?.name ?? 'Branch unavailable'} · {student.batch} · First Semester Batch 2026</p>
           </div>
-          <button type="button" className="quiet-button focus-ring" onClick={startOver} data-testid="button-start-over"><RotateCcw size={14} aria-hidden="true" /> Start over</button>
-        </div>
-        <div className="semester-tabs" role="tablist" aria-label="Semester selector">
-          {SEMESTERS.map((item) => (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={item.id === student.semester}
-              className={`semester-tab focus-ring ${item.id === student.semester ? 'active' : ''}`}
-              onClick={() => changeSemester(item.id)}
-              key={item.id}
-              data-testid={`button-semester-${item.id}`}
-            >
-              S{item.id}
-            </button>
-          ))}
+          <Link href="/my-class" className="quiet-button focus-ring" data-testid="button-back-to-my-class"><ArrowLeft size={14} aria-hidden="true" /> Back to My Class</Link>
         </div>
         <div className="schedule-meta">
-           <span data-testid="text-schedule-source">Reference schedule · Computer Engineering · Sem 1 · {student.batch}</span>
-          <span className="live-key"><span className="live-dot" aria-hidden="true" /> Current lecture follows your local time</span>
+          <span data-testid="text-schedule-source">Reference schedule · Computer Engineering · Sem 1 · {student.batch}</span>
+          <span className="live-key"><span className="live-dot" aria-hidden="true" /> Today is {today}</span>
         </div>
-        {rows ? (
+        {rows.length > 0 ? (
           <section className="schedule-shell" aria-label={`${semester?.label ?? 'Semester'} weekly timetable`}>
             <div className="schedule-scroll">
               <table className="schedule-table">
@@ -435,16 +568,17 @@ function TimetablePage() {
                     <tr key={row.time}>
                       <td className="time-cell"><Timer size={13} aria-hidden="true" />{row.time}<small>local time</small></td>
                       {DAYS.map((day) => {
-                         const cell = row.cells[day] ? timetableCellForBatch(row.cells[day], student.batch) : null;
-                        const current = Boolean(cell) && isCurrentLecture(row.time, day, now);
+                        const cell = row.cells[day];
+                        const range = timeRangeToMinutes(row.time);
+                        const isCurrent = Boolean(cell) && today === day && currentMinutes >= range.start && currentMinutes < range.end;
                         return (
                           <td key={`${row.time}-${day}`} data-testid={`cell-${day.toLowerCase()}-${row.time.replace(/[^0-9]/g, '')}`}>
                             {cell && (
-                              <div className={`lecture ${current ? 'current' : ''}`} data-testid={`lecture-${day.toLowerCase()}-${row.time.replace(/[^0-9]/g, '')}`}>
-                                {current && <span className="now-label">Now</span>}
+                              <div className={`lecture ${isCurrent ? 'current' : ''}`} data-testid={`lecture-${day.toLowerCase()}-${row.time.replace(/[^0-9]/g, '')}`}>
+                                {isCurrent && <span className="now-label">Now</span>}
                                 <div className="lecture-code">{cell.label}</div>
                                 {cell.faculty && <div className="lecture-faculty">Faculty · {cell.faculty}</div>}
-                                <div className="lecture-room">Room · not listed</div>
+                                <div className="lecture-room">Room · {cell.room ?? 'not listed'}</div>
                               </div>
                             )}
                           </td>
@@ -461,7 +595,6 @@ function TimetablePage() {
             <div className="empty-icon"><CalendarDays size={19} aria-hidden="true" /></div>
             <h2>No supplied timetable for {semester?.label ?? 'this semester'}</h2>
             <p>The available reference image is labeled First Semester Batch 2026. No schedule has been supplied for this semester, so nothing has been invented here.</p>
-            <button type="button" className="quiet-button focus-ring" onClick={() => changeSemester(1)} data-testid="button-view-semester-one">View Semester 1 reference</button>
           </section>
         )}
         <div className="timetable-footer">
@@ -479,7 +612,8 @@ function Router() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/find" component={FinderPage} />
-        <Route path="/timetable" component={TimetablePage} />
+        <Route path="/my-class" component={MyClassPage} />
+        <Route path="/timetable" component={FullTimetablePage} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>
@@ -509,11 +643,7 @@ function App() {
     setStudentState(null);
     window.sessionStorage.removeItem('gec-student-context');
   };
-  const changeSemester = (semester: number) => {
-    if (!student) return;
-    setStudent({ ...student, semester });
-  };
-  const campusState = useMemo(() => ({ student, setStudent, resetStudent, changeSemester }), [student]);
+  const campusState = useMemo(() => ({ student, setStudent, resetStudent }), [student]);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -28,14 +28,14 @@ Personalized timetable lookup for Government Engineering College, Palanpur stude
 
 ## Architecture decisions
 
-- The class finder is a single unified flow: enrollment lookup detects branch and CP batch, while semester is always selected manually.
+- The class finder is a single unified flow: semester is selected first, then enrollment lookup detects branch and CP batch.
 - Reference-derived data is kept in separate typed collections for branches, semesters, subjects, faculty, rooms, enrollment mappings, and timetables.
 - Unsupported semesters remain explicit no-data states; the UI does not infer or invent schedules, rooms, faculty, or enrollment mappings.
 - CP-specific timetable labels are resolved from the supplied combined reference cells using the detected batch.
 
 ## Product
 
-The app gives students a polished home entry point, lookup by supplied enrollment mappings, manual Semester 1–8 selection, a personalized Computer Engineering timetable for supported reference data, current lecture highlighting, and honest no-data states for semesters without supplied schedules.
+The app gives students a polished home entry point, a semester-first unified finder, lookup by supplied enrollment mappings, a personalized Computer Engineering “My Class” view with current/next/today lecture prioritization, an explicit full timetable view for supported reference data, and honest no-data states for semesters without supplied schedules.
 
 ## User preferences
 
