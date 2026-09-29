@@ -453,8 +453,8 @@ function MyClassPage() {
             {current ? (
               <>
                 <h2 data-testid="text-current-lecture">{current.cell.label}</h2>
-                <p className="lecture-time">{current.row.time}</p>
-                <div className="lecture-details"><span>Faculty · {current.cell.faculty ?? 'not listed'}</span><span>Room · {current.cell.room ?? 'not listed'}</span></div>
+                <p className="lecture-time">Current lecture time · {current.row.time}</p>
+                <div className="lecture-details"><span>Professor · {current.cell.faculty ?? 'not listed'}</span><span className="room-detail">Room Number · {current.cell.room ?? 'Room not available'}</span></div>
                 <p className="countdown">{formatCountdown(currentEndsIn, 'Ends in')}</p>
               </>
             ) : (
@@ -469,8 +469,8 @@ function MyClassPage() {
             {next ? (
               <>
                 <h2 data-testid="text-next-lecture">{next.cell.label}</h2>
-                <p className="lecture-time">{next.row.time}</p>
-                <div className="lecture-details"><span>Faculty · {next.cell.faculty ?? 'not listed'}</span><span>Room · {next.cell.room ?? 'not listed'}</span></div>
+                <p className="lecture-time">Lecture time · {next.row.time}</p>
+                <div className="lecture-details"><span>Professor · {next.cell.faculty ?? 'not listed'}</span><span className="room-detail">Room Number · {next.cell.room ?? 'Room not available'}</span></div>
                 <p className="countdown">{formatCountdown(nextStartsIn, 'Starts in')}</p>
               </>
             ) : (
@@ -496,7 +496,7 @@ function MyClassPage() {
                   <div className={`today-lecture ${isCurrent ? 'is-current' : ''} ${isComplete && !isCurrent ? 'is-complete' : ''}`} key={row.time} data-testid={`today-lecture-${row.time.replace(/[^0-9]/g, '')}`}>
                     <div className="today-time">{row.time}</div>
                     <div className="today-subject"><strong>{cell.label}</strong><span>{isCurrent ? 'Live now' : isComplete ? 'Completed' : 'Upcoming'}</span></div>
-                    <div className="today-meta"><span>Faculty · {cell.faculty ?? 'not listed'}</span><span>Room · {cell.room ?? 'not listed'}</span></div>
+                    <div className="today-meta"><span>Professor · {cell.faculty ?? 'not listed'}</span><span className="room-detail">Room Number · {cell.room ?? 'Room not available'}</span></div>
                   </div>
                 );
               })}
@@ -577,8 +577,8 @@ function FullTimetablePage() {
                               <div className={`lecture ${isCurrent ? 'current' : ''}`} data-testid={`lecture-${day.toLowerCase()}-${row.time.replace(/[^0-9]/g, '')}`}>
                                 {isCurrent && <span className="now-label">Now</span>}
                                 <div className="lecture-code">{cell.label}</div>
-                                {cell.faculty && <div className="lecture-faculty">Faculty · {cell.faculty}</div>}
-                                <div className="lecture-room">Room · {cell.room ?? 'not listed'}</div>
+                                {cell.faculty && <div className="lecture-faculty">Professor · {cell.faculty}</div>}
+                                <div className="lecture-room room-detail">Room Number · {cell.room ?? 'Room not available'}</div>
                               </div>
                             )}
                           </td>
@@ -598,7 +598,7 @@ function FullTimetablePage() {
           </section>
         )}
         <div className="timetable-footer">
-          <span>Room numbers are not present in the supplied reference data.</span>
+          <span>Room numbers are shown when present in the supplied source data.</span>
           <button type="button" onClick={startOver} data-testid="button-change-enrollment">Change enrollment</button>
         </div>
       </main>

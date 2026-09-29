@@ -454,6 +454,7 @@
 .focus-card.is-idle h2 { color: hsl(var(--foreground)); font-size: clamp(28px, 3vw, 39px); }
 .lecture-time { margin: 0; font-family: var(--app-font-mono); font-size: 12px; }
 .lecture-details { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 18px; color: hsl(var(--muted-foreground)); font-size: 11px; }
+.room-detail { color: hsl(var(--foreground)); font-weight: 600; }
 .countdown { margin: 21px 0 0; color: hsl(var(--accent-foreground)); font-size: 12px; font-weight: 700; }
 .focus-support { max-width: 270px; color: hsl(var(--muted-foreground)); font-size: 13px; line-height: 1.6; margin-top: 16px; }
 .today-section { margin-top: 48px; }
